@@ -1,6 +1,7 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { getSchedulerStatus } from "@/lib/scheduler";
+import { getSession } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -77,26 +78,29 @@ function computeStats(records: { status: string; ttft_ms: number; tokens_per_sec
   };
 }
 
-export async function GET() {
-  const db = getDb();
+export async function GET(req: NextRequest) {
+  const session = await getSession(req);
+  const isAdmin = !!session;
+  const sql = getDb();
 
-  const endpoints = db.prepare("SELECT * FROM api_endpoints ORDER BY created_at DESC").all() as any[];
+  const endpoints = await sql`SELECT * FROM api_endpoints ORDER BY created_at DESC` as any[];
 
-  const statusData = endpoints.map((ep) => {
-    const latest = db.prepare(`
+  const statusData = await Promise.all(endpoints.map(async (ep: any) => {
+    const latestRows = await sql`
       SELECT * FROM check_results 
-      WHERE endpoint_id = ? 
+      WHERE endpoint_id = ${ep.id}
       ORDER BY checked_at DESC 
       LIMIT 1
-    `).get(ep.id) as any;
+    `;
+    const latest = latestRows[0] || null;
 
     // 取最近 7 天所有记录（覆盖所有时间段）
-    const allRecords = db.prepare(`
+    const allRecords = await sql`
       SELECT status, ttft_ms, tokens_per_sec, checked_at 
       FROM check_results 
-      WHERE endpoint_id = ? AND checked_at > datetime('now', '-7 days')
+      WHERE endpoint_id = ${ep.id} AND checked_at > NOW() - INTERVAL '7 days'
       ORDER BY checked_at ASC
-    `).all(ep.id) as { status: string; ttft_ms: number; tokens_per_sec: number; checked_at: string }[];
+    ` as { status: string; ttft_ms: number; tokens_per_sec: number; checked_at: string }[];
 
     // 为每个时间段聚合格子数据和统计
     const ranges: Record<string, { slots: SlotData[]; cols: number; uptime: string; avgTtft: number; avgTokensPerSec: number; total: number }> = {};
@@ -104,8 +108,8 @@ export async function GET() {
     for (const tr of TIME_RANGES) {
       const cutoff = now - tr.hours * 3600_000;
       const filtered = allRecords.filter((r) => {
-        const raw = r.checked_at;
-        return new Date(raw.endsWith("Z") ? raw : raw + "Z").getTime() >= cutoff;
+        const t = new Date(r.checked_at).getTime();
+        return t >= cutoff;
       });
       const slots = aggregateSlots(filtered, tr.hours, tr.slots);
       const stats = computeStats(filtered);
@@ -122,13 +126,14 @@ export async function GET() {
         check_mode: ep.check_mode || "chat",
         api_path: ep.api_path || "",
         enabled: ep.enabled === 1,
+        api_key: isAdmin ? ep.api_key : undefined,
       },
-      latest: latest || null,
+      latest,
       ranges,
     };
-  });
+  }));
 
-  const scheduler = getSchedulerStatus();
+  const scheduler = await getSchedulerStatus();
 
   return NextResponse.json({
     scheduler,

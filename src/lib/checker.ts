@@ -237,11 +237,11 @@ export async function checkEndpoint(endpoint: ApiEndpoint): Promise<CheckResult>
     responseTimeMs = Date.now() - start;
   }
 
-  const db = getDb();
-  db.prepare(`
+  const sql = getDb();
+  await sql`
     INSERT INTO check_results (endpoint_id, status, response_time_ms, ttft_ms, tokens_per_sec, error_message)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `).run(endpoint.id, status, responseTimeMs, ttftMs, tokensPerSec, errorMessage);
+    VALUES (${endpoint.id}, ${status}, ${responseTimeMs}, ${ttftMs}, ${tokensPerSec}, ${errorMessage})
+  `;
 
   return {
     id: 0,
@@ -256,8 +256,8 @@ export async function checkEndpoint(endpoint: ApiEndpoint): Promise<CheckResult>
 }
 
 export async function checkAllEndpoints() {
-  const db = getDb();
-  const endpoints = db.prepare("SELECT * FROM api_endpoints WHERE enabled = 1").all() as ApiEndpoint[];
+  const sql = getDb();
+  const endpoints = await sql`SELECT * FROM api_endpoints WHERE enabled = 1` as ApiEndpoint[];
   const results = await Promise.allSettled(endpoints.map((ep) => checkEndpoint(ep)));
   return results.map((r, i) => ({
     endpoint: endpoints[i],

@@ -1,26 +1,39 @@
-import Database from "better-sqlite3";
-import path from "path";
+import { neon } from "@neondatabase/serverless";
+import { createHash } from "crypto";
 
-const DB_PATH = path.join(process.cwd(), "data", "monitor.db");
-
-let db: Database.Database | null = null;
-
-export function getDb(): Database.Database {
-  if (!db) {
-    const fs = require("fs");
-    const dir = path.dirname(DB_PATH);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-    db = new Database(DB_PATH);
-    db.pragma("journal_mode = WAL");
-    initDb(db);
-  }
-  return db;
+export function getDb() {
+  const url = process.env.DATABASE_URL;
+  if (!url) throw new Error("DATABASE_URL environment variable is not set");
+  return neon(url);
 }
 
-function initDb(db: Database.Database) {
-  db.exec(`
+export async function initDb() {
+  const sql = getDb();
+  await sql`
+    CREATE TABLE IF NOT EXISTS users (
+      id SERIAL PRIMARY KEY,
+      username TEXT UNIQUE NOT NULL,
+      password_hash TEXT NOT NULL,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `;
+  await sql`
+    CREATE TABLE IF NOT EXISTS sessions (
+      token TEXT PRIMARY KEY,
+      username TEXT NOT NULL,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      expires_at TIMESTAMPTZ NOT NULL
+    )
+  `;
+  await sql`
+    CREATE TABLE IF NOT EXISTS login_attempts (
+      ip TEXT PRIMARY KEY,
+      fail_count INTEGER DEFAULT 0,
+      last_fail_at TIMESTAMPTZ,
+      banned BOOLEAN DEFAULT FALSE
+    )
+  `;
+  await sql`
     CREATE TABLE IF NOT EXISTS api_endpoints (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
@@ -31,34 +44,39 @@ function initDb(db: Database.Database) {
       check_mode TEXT DEFAULT 'chat',
       api_path TEXT DEFAULT '',
       enabled INTEGER DEFAULT 1,
-      created_at TEXT DEFAULT (datetime('now'))
-    );
-
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `;
+  await sql`
     CREATE TABLE IF NOT EXISTS check_results (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id SERIAL PRIMARY KEY,
       endpoint_id TEXT NOT NULL,
       status TEXT NOT NULL,
       response_time_ms INTEGER DEFAULT 0,
       ttft_ms INTEGER DEFAULT 0,
       tokens_per_sec REAL DEFAULT 0,
       error_message TEXT DEFAULT '',
-      checked_at TEXT DEFAULT (datetime('now')),
-      FOREIGN KEY (endpoint_id) REFERENCES api_endpoints(id)
-    );
+      checked_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS idx_check_results_endpoint
+      ON check_results(endpoint_id, checked_at DESC)
+  `;
+  await sql`
+    CREATE TABLE IF NOT EXISTS scheduler_meta (
+      key TEXT PRIMARY KEY,
+      value TEXT
+    )
+  `;
 
-    CREATE INDEX IF NOT EXISTS idx_check_results_endpoint 
-      ON check_results(endpoint_id, checked_at DESC);
-  `);
-
-  // 迁移：为旧表补充新列（如果不存在）
-  const cols = db.prepare("PRAGMA table_info(check_results)").all() as { name: string }[];
-  const colNames = cols.map((c) => c.name);
-  if (!colNames.includes("ttft_ms")) {
-    db.exec("ALTER TABLE check_results ADD COLUMN ttft_ms INTEGER DEFAULT 0");
-  }
-  if (!colNames.includes("tokens_per_sec")) {
-    db.exec("ALTER TABLE check_results ADD COLUMN tokens_per_sec REAL DEFAULT 0");
-  }
+  // 初始化默认管理员账号 root/root
+  const hash = createHash("sha256").update("root").digest("hex");
+  await sql`
+    INSERT INTO users (username, password_hash)
+    VALUES ('root', ${hash})
+    ON CONFLICT (username) DO NOTHING
+  `;
 }
 
 export type Provider = "claude" | "openai" | "openai-compatible";

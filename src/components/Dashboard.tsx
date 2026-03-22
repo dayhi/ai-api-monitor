@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   Radio,
   Plus,
@@ -9,9 +9,14 @@ import {
   ShieldCheck,
   ShieldAlert,
   Activity,
+  LogIn,
+  LogOut,
+  KeyRound,
 } from "lucide-react";
 import { EndpointCard } from "./EndpointCard";
 import { AddEndpointModal } from "./AddEndpointModal";
+import { LoginModal } from "./LoginModal";
+import { ChangePasswordModal } from "./ChangePasswordModal";
 
 interface StatusData {
   scheduler: { running: boolean; lastCheckTime: string | null; isChecking: boolean };
@@ -26,8 +31,19 @@ export function Dashboard() {
   const [checking, setChecking] = useState(false);
   const [countdown, setCountdown] = useState(60);
   const [mounted, setMounted] = useState(false);
+  const [username, setUsername] = useState<string | null>(null);
+  const [showLogin, setShowLogin] = useState(false);
+  const [showChangePw, setShowChangePw] = useState(false);
 
   useEffect(() => { setMounted(true); }, []);
+
+  // 检查登录状态
+  useEffect(() => {
+    fetch("/api/auth/me")
+      .then((r) => r.json())
+      .then((d) => { if (d.loggedIn) setUsername(d.username); })
+      .catch(() => {});
+  }, []);
 
   const fetchData = useCallback(async () => {
     try {
@@ -56,6 +72,7 @@ export function Dashboard() {
   }, [data?.scheduler?.lastCheckTime]);
 
   async function manualCheck() {
+    if (!username) { setShowLogin(true); return; }
     setChecking(true);
     try {
       await fetch("/api/check", { method: "POST" });
@@ -66,6 +83,7 @@ export function Dashboard() {
   }
 
   async function toggleEndpoint(id: string, enabled: boolean) {
+    if (!username) { setShowLogin(true); return; }
     await fetch("/api/endpoints", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -75,11 +93,19 @@ export function Dashboard() {
   }
 
   async function deleteEndpoint(id: string) {
+    if (!username) { setShowLogin(true); return; }
     if (!confirm("确定删除该端点及其所有历史记录？")) return;
     await fetch(`/api/endpoints?id=${id}`, { method: "DELETE" });
     fetchData();
   }
 
+  async function handleLogout() {
+    await fetch("/api/auth/logout", { method: "POST" });
+    setUsername(null);
+    fetchData();
+  }
+
+  const isAdmin = !!username;
   const endpoints = data?.endpoints || [];
   const totalUp = endpoints.filter(
     (e: any) => e.endpoint.enabled && e.latest?.status === "up"
@@ -96,7 +122,6 @@ export function Dashboard() {
       {/* Top bar */}
       <header className="panel border-b border-border sticky top-0 z-30">
         <div className="max-w-7xl mx-auto px-4 sm:px-6">
-          {/* Hazard stripe accent */}
           <div className="h-[2px] -mx-4 sm:-mx-6 bg-gradient-to-r from-transparent via-accent-amber/30 to-transparent" />
 
           <div className="flex items-center justify-between py-3">
@@ -133,20 +158,50 @@ export function Dashboard() {
                 disabled={checking}
                 className="btn-industrial flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider rounded border border-border text-text-dim hover:text-accent-cyan hover:border-accent-cyan/30 disabled:opacity-50"
               >
-                <RefreshCw
-                  size={12}
-                  className={checking ? "animate-spin" : ""}
-                />
+                <RefreshCw size={12} className={checking ? "animate-spin" : ""} />
                 立即检测
               </button>
 
-              <button
-                onClick={() => setShowAdd(true)}
-                className="btn-industrial flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider rounded border border-accent-cyan bg-accent-cyan/10 text-accent-cyan hover:bg-accent-cyan/20"
-              >
-                <Plus size={12} />
-                添加
-              </button>
+              {isAdmin && (
+                <button
+                  onClick={() => setShowAdd(true)}
+                  className="btn-industrial flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider rounded border border-accent-cyan bg-accent-cyan/10 text-accent-cyan hover:bg-accent-cyan/20"
+                >
+                  <Plus size={12} />
+                  添加
+                </button>
+              )}
+
+              {/* Auth area */}
+              {isAdmin ? (
+                <div className="flex items-center gap-1.5">
+                  <span className="hidden sm:inline text-[10px] font-mono text-text-muted border border-border px-2 py-1.5 rounded">
+                    {username}
+                  </span>
+                  <button
+                    onClick={() => setShowChangePw(true)}
+                    className="btn-industrial p-1.5 rounded border border-border text-text-muted hover:text-accent-amber hover:border-accent-amber/30"
+                    title="修改密码"
+                  >
+                    <KeyRound size={13} />
+                  </button>
+                  <button
+                    onClick={handleLogout}
+                    className="btn-industrial p-1.5 rounded border border-border text-text-muted hover:text-accent-red hover:border-accent-red/30"
+                    title="退出登录"
+                  >
+                    <LogOut size={13} />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setShowLogin(true)}
+                  className="btn-industrial flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider rounded border border-border text-text-muted hover:text-accent-amber hover:border-accent-amber/30"
+                >
+                  <LogIn size={12} />
+                  登录
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -204,6 +259,7 @@ export function Dashboard() {
               <EndpointCard
                 key={ep.endpoint.id}
                 data={ep}
+                isAdmin={isAdmin}
                 onToggle={toggleEndpoint}
                 onDelete={deleteEndpoint}
               />
@@ -228,6 +284,16 @@ export function Dashboard() {
         open={showAdd}
         onClose={() => setShowAdd(false)}
         onAdded={fetchData}
+      />
+      <LoginModal
+        open={showLogin}
+        onClose={() => setShowLogin(false)}
+        onLoggedIn={(name) => { setUsername(name); fetchData(); }}
+      />
+      <ChangePasswordModal
+        open={showChangePw}
+        onClose={() => setShowChangePw(false)}
+        onChanged={() => { setUsername(null); fetchData(); }}
       />
     </div>
   );

@@ -195,7 +195,7 @@ export function AddEndpointModal({ open, onClose, onAdded }: Props) {
                 模型
               </label>
               <input
-                required={checkMode !== "models"}
+                required
                 value={model}
                 onChange={(e) => setModel(e.target.value)}
                 placeholder={PRESETS[provider].model || "model-name"}

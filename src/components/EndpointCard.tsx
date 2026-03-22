@@ -43,6 +43,7 @@ interface EndpointData {
 
 interface Props {
   data: EndpointData;
+  isAdmin: boolean;
   onToggle: (id: string, enabled: boolean) => void;
   onDelete: (id: string) => void;
 }
@@ -53,7 +54,7 @@ const RANGE_ROWS = [
   { key: "7d", label: "7天", perSlot: "1小时" },
 ];
 
-export function EndpointCard({ data, onToggle, onDelete }: Props) {
+export function EndpointCard({ data, isAdmin, onToggle, onDelete }: Props) {
   const { endpoint, latest, ranges } = data;
   const status = latest?.status as "up" | "down" | "timeout" | "error" | null;
   const isDown = status === "down" || status === "error";
@@ -98,22 +99,24 @@ export function EndpointCard({ data, onToggle, onDelete }: Props) {
           </div>
         </div>
 
-        <div className="flex items-center gap-1.5 shrink-0">
-          <button
-            onClick={() => onToggle(endpoint.id, !endpoint.enabled)}
-            className="btn-industrial p-1.5 rounded border border-border hover:border-border-light text-text-muted hover:text-foreground"
-            title={endpoint.enabled ? "禁用" : "启用"}
-          >
-            {endpoint.enabled ? <Power size={13} /> : <PowerOff size={13} />}
-          </button>
-          <button
-            onClick={() => onDelete(endpoint.id)}
-            className="btn-industrial p-1.5 rounded border border-border hover:border-accent-red/50 text-text-muted hover:text-accent-red"
-            title="删除"
-          >
-            <Trash2 size={13} />
-          </button>
-        </div>
+        {isAdmin && (
+          <div className="flex items-center gap-1.5 shrink-0">
+            <button
+              onClick={() => onToggle(endpoint.id, !endpoint.enabled)}
+              className="btn-industrial p-1.5 rounded border border-border hover:border-border-light text-text-muted hover:text-foreground"
+              title={endpoint.enabled ? "禁用" : "启用"}
+            >
+              {endpoint.enabled ? <Power size={13} /> : <PowerOff size={13} />}
+            </button>
+            <button
+              onClick={() => onDelete(endpoint.id)}
+              className="btn-industrial p-1.5 rounded border border-border hover:border-accent-red/50 text-text-muted hover:text-accent-red"
+              title="删除"
+            >
+              <Trash2 size={13} />
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Metrics row */}

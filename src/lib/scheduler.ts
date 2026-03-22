@@ -1,83 +1,38 @@
-import cron from "node-cron";
-import { checkAllEndpoints } from "./checker";
 import { getDb } from "./db";
 
-let task: cron.ScheduledTask | null = null;
-let isChecking = false;
+// Vercel Serverless 环境：无常驻进程，调度由 Vercel Cron Jobs 触发
+// scheduler.ts 只提供状态读写工具函数
 
-function ensureMetaTable() {
-  const db = getDb();
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS scheduler_meta (
-      key TEXT PRIMARY KEY,
-      value TEXT
-    );
-  `);
+async function setMeta(key: string, value: string) {
+  const sql = getDb();
+  await sql`
+    INSERT INTO scheduler_meta (key, value) VALUES (${key}, ${value})
+    ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
+  `;
 }
 
-function setMeta(key: string, value: string) {
-  const db = getDb();
-  db.prepare("INSERT OR REPLACE INTO scheduler_meta (key, value) VALUES (?, ?)").run(key, value);
+async function getMeta(key: string): Promise<string | null> {
+  const sql = getDb();
+  const rows = await sql`SELECT value FROM scheduler_meta WHERE key = ${key}`;
+  return (rows[0] as { value: string } | undefined)?.value ?? null;
 }
 
-function getMeta(key: string): string | null {
-  const db = getDb();
-  const row = db.prepare("SELECT value FROM scheduler_meta WHERE key = ?").get(key) as { value: string } | undefined;
-  return row?.value ?? null;
+export async function recordCheckStart() {
+  await setMeta("is_checking", "true");
+  await setMeta("scheduler_running", "true");
 }
 
-export function startScheduler() {
-  ensureMetaTable();
-
-  // 如果 task 已经存在（内存态），只更新 meta
-  if (task) {
-    setMeta("scheduler_running", "true");
-    return;
-  }
-
-  setMeta("scheduler_running", "true");
-  console.log("[Monitor] Starting scheduler - checking every 1 minute");
-
-  // Run immediately on start
-  runCheck();
-
-  // Then every minute
-  task = cron.schedule("* * * * *", () => {
-    runCheck();
-  });
+export async function recordCheckDone() {
+  await setMeta("is_checking", "false");
+  await setMeta("last_check_time", new Date().toISOString());
 }
 
-async function runCheck() {
-  if (isChecking) return;
-  isChecking = true;
-  setMeta("is_checking", "true");
+export async function getSchedulerStatus() {
   try {
-    console.log(`[Monitor] Running health checks at ${new Date().toISOString()}`);
-    await checkAllEndpoints();
-    setMeta("last_check_time", new Date().toISOString());
-  } catch (err) {
-    console.error("[Monitor] Check failed:", err);
-  } finally {
-    isChecking = false;
-    setMeta("is_checking", "false");
-  }
-}
-
-export function stopScheduler() {
-  if (task) {
-    task.stop();
-    task = null;
-    setMeta("scheduler_running", "false");
-  }
-}
-
-export function getSchedulerStatus() {
-  try {
-    ensureMetaTable();
     return {
-      running: getMeta("scheduler_running") === "true",
-      lastCheckTime: getMeta("last_check_time"),
-      isChecking: getMeta("is_checking") === "true",
+      running: true,
+      lastCheckTime: await getMeta("last_check_time"),
+      isChecking: (await getMeta("is_checking")) === "true",
     };
   } catch {
     return { running: false, lastCheckTime: null, isChecking: false };
