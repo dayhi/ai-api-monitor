@@ -1,36 +1,51 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# AI API Monitor // CTRL-PANEL
 
-## Getting Started
+工业风 AI API 健康监控系统，支持 Claude (Anthropic) 和 GPT (OpenAI) 兼容接口的存活检测。
 
-First, run the development server:
+## 功能
+
+- **多端点监控** — 支持添加多个 Claude / GPT 第三方 API 端点
+- **定时检测** — 每 1 分钟自动检测所有启用的端点
+- **手动触发** — 支持一键手动检测
+- **历史记录** — SQLite 存储检测历史，展示最近 60 次检测时间线
+- **Uptime 统计** — 24 小时可用率和平均响应时间
+- **工业风 UI** — 深色工控机风格界面，硬边面板、网格背景、警示色
+
+## 快速开始
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+打开 http://localhost:3000 查看监控面板。
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 添加端点
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+1. 点击界面右上角 **ADD** 按钮
+2. 选择 Provider（Claude / GPT）
+3. 填写名称、Base URL、Model 和 API Key
+4. 点击 **ADD ENDPOINT**
 
-## Learn More
+> **注意**：不填 API Key 也可以检测 API 是否可达（403 表示可达但 key 无效）。
 
-To learn more about Next.js, take a look at the following resources:
+## 检测逻辑
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+| Provider | 请求路径 | 认证方式 |
+|----------|---------|---------|
+| Claude   | `{base_url}/v1/messages` | `x-api-key` header |
+| GPT      | `{base_url}/v1/chat/completions` | `Bearer` token |
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+**状态判定**：
+- **UP** — 请求成功，或返回 401/403/429（API 可达）
+- **DOWN** — 网络不可达或 DNS 解析失败
+- **TIMEOUT** — 请求超过 15 秒
+- **ERROR** — 其他 HTTP 错误
 
-## Deploy on Vercel
+## 技术栈
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- **Next.js 16** — 全栈框架
+- **SQLite** (better-sqlite3) — 轻量持久化
+- **node-cron** — 定时任务调度
+- **TailwindCSS** — 样式
+- **Lucide React** — 图标

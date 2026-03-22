@@ -1,26 +1,120 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+  --color-background: #121416;
+  --color-foreground: #e0e0e0;
+  --color-surface: #1a1d21;
+  --color-surface-2: #22262b;
+  --color-border: #2e3338;
+  --color-border-light: #3a3f45;
+  --color-accent-amber: #d4880f;
+  --color-accent-orange: #e85d26;
+  --color-accent-cyan: #22b8cf;
+  --color-accent-green: #2ecc71;
+  --color-accent-red: #e74c3c;
+  --color-text-muted: #6b7280;
+  --color-text-dim: #9ca3af;
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+body {
+  background: var(--color-background);
+  color: var(--color-foreground);
+  font-family: var(--font-mono), ui-monospace, monospace;
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* Industrial grid background */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.015) 1px, transparent 1px);
+  background-size: 24px 24px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Hazard stripes utility */
+.hazard-stripe {
+  background: repeating-linear-gradient(
+    -45deg,
+    transparent,
+    transparent 4px,
+    rgba(212,136,15,0.08) 4px,
+    rgba(212,136,15,0.08) 8px
+  );
+}
+
+/* Industrial panel */
+.panel {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  position: relative;
+}
+
+.panel::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(255,255,255,0.02) 0%, transparent 40%);
+  pointer-events: none;
+}
+
+/* Brushed metal texture */
+.brushed-metal {
+  background-image: 
+    linear-gradient(180deg, rgba(255,255,255,0.02) 0%, transparent 50%),
+    repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 1px,
+      rgba(255,255,255,0.005) 1px,
+      rgba(255,255,255,0.005) 2px
+    );
+}
+
+/* Status indicator pulse */
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 4px currentColor; }
+  50% { box-shadow: 0 0 8px currentColor, 0 0 12px currentColor; }
+}
+
+.status-pulse {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+/* Button press effect */
+.btn-industrial {
+  transition: all 150ms ease-out;
+  box-shadow: 0 2px 0 rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.05);
+}
+
+.btn-industrial:hover {
+  box-shadow: 0 2px 0 rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.08);
+  filter: brightness(1.1);
+}
+
+.btn-industrial:active {
+  transform: translateY(1px);
+  box-shadow: 0 1px 0 rgba(0,0,0,0.3), inset 0 1px 2px rgba(0,0,0,0.2);
+  filter: brightness(0.95);
+}
+
+/* Scrollbar industrial style */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--color-surface); }
+::-webkit-scrollbar-thumb { background: var(--color-border-light); border-radius: 1px; }
+::-webkit-scrollbar-thumb:hover { background: var(--color-text-muted); }
+
+/* Alert blink (low frequency) */
+@keyframes alert-blink {
+  0%, 70%, 100% { opacity: 1; }
+  35% { opacity: 0.4; }
+}
+
+.alert-blink {
+  animation: alert-blink 3s ease-in-out infinite;
 }
